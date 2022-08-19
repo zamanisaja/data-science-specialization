@@ -1,0 +1,227 @@
+---
+title: "Analyze of Storm Data"
+output: 
+  html_document:
+    keep_md: true
+---
+```{r include=FALSE}
+# some global options
+knitr::opts_chunk$set(warning = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_knit$set(cache = TRUE)
+knitr::opts_chunk$set(fig.path = "./figure/")
+knitr::opts_chunk$set(fig.align = "center")
+```
+
+# Analyze of Storm data
+
+In this report we're going to take a look at the storms recorded in the US.
+
+for this report we're going to use the data from the  U.S. National Oceanic and Atmospheric Administration's ([NOAA](https://www.noaa.gov/)) storm database. This database tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage.
+
+We're going to investigate different types of storms and find the ones that cause the most damage with respect to the population and economy.
+
+
+### Data Processing
+First let's load the data and look at its first rows.
+
+```{r ReadingData, echo=FALSE}
+library(tidyverse)
+if (!exists("stormData")) {
+    if (!file.exists("data/repdata_data_StormData.csv.bz2")) {
+        download.file(
+            url = "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2",
+            destfile = "data/repdata_data_StormData.csv.bz2"
+        )
+    } else {
+        stormData <- read_csv("data/repdata_data_StormData.csv.bz2")
+    }
+}
+# let's keep a copy of the original data just in case
+rawStormData <- stormData
+```
+
+```{r}
+head(stormData)
+```
+
+Lets clean our data a bit and select the columns that we're going to need for this report.
+
+The columns "FATALITIES" and "INJURIES" are the one that report the damage to the population. 
+
+And the columns "PROPDMG","PROPDMGEXP", "CROPDMG", "CROPDMGEXP" are the damage to the economy.
+
+```{r DataCleaning}
+stormData <- stormData %>%
+    select(STATE, COUNTYNAME, BGN_DATE, , EVTYPE, F, FATALITIES:INJURIES, PROPDMG:CROPDMGEXP)
+
+# Convert the date to a date format
+if (!inherits(stormData$BGN_DATE, "Date")) {
+    stormData <- stormData %>%
+        mutate(across(BGN_DATE, gsub, pattern = " .*", replacement = "")) %>%
+        mutate(BGN_DATE = as.Date(BGN_DATE, format = "%m/%d/%Y"))
+}
+
+# Create factors
+stormData <- stormData %>%
+    mutate(
+        STATE = as.factor(STATE),
+        F = as.factor(F),
+        EVTYPE = as.factor(EVTYPE),
+    )
+```
+
+```{r}
+summary(stormData)
+str(stormData)
+```
+
+Now I'll see how the total number of records have changed over the years.
+```{r yearlyCount}
+stormData %>%
+    mutate(year = format(BGN_DATE, "%Y")) %>%
+    group_by(year) %>%
+    summarise(n = n()) %>%
+    ggplot(aes(x = as.numeric(year), y = n)) +
+    geom_line() +
+    labs(
+        x = "Year", y = "Number of Storms",
+        title = "Total Number of Storms reported per year"
+    )
+```
+
+We can see there is an increase in the number of storms reported in the each year. 
+Which is probably because of the lack of good records imn the earlier years.
+The k,M in the columsn PROPDMGEXP, CROPDMGEXP stand for thousands, millions. We'll convert them to numbers.
+
+And also there are some undfeined values like "?" or NA in the damage related columns. I'll replace them them with 0.
+```{r DataConverting} 
+stormData <- stormData %>%
+    mutate(across(c(PROPDMGEXP, CROPDMGEXP), gsub, pattern = "B|b", replacement = "9")) %>%
+    mutate(across(c(PROPDMGEXP, CROPDMGEXP), gsub, pattern = "M|m", replacement = "6")) %>%
+    mutate(across(c(PROPDMGEXP, CROPDMGEXP), gsub, pattern = "K|k", replacement = "3")) %>%
+    mutate(across(c(PROPDMGEXP, CROPDMGEXP), gsub, pattern = "H|h", replacement = "2")) %>%
+    mutate(across(c(PROPDMGEXP, CROPDMGEXP), gsub, pattern = "-|\\?|\\+", replacement = "0")) %>%
+    mutate(PROPDMGEXP = as.numeric(PROPDMGEXP)) %>%
+    mutate(CROPDMGEXP = as.numeric(CROPDMGEXP)) %>%
+    mutate(PROPDMGEXP = replace_na(PROPDMGEXP, 0)) %>%
+    mutate(CROPDMGEXP = replace_na(CROPDMGEXP, 0))
+```
+
+### Economic Damage
+
+To find the most damaging event type we sum the damages to the propertyand crops to each other.
+To do so we'll have to rescale them with the PROPDMGEXP which is the scaling factor.
+```{r EconomicDamageSummary}
+stormData <- stormData %>%
+    mutate(
+        PROPDAMAGE = PROPDMG * 10**(PROPDMGEXP),
+        CROPDAMAGE = CROPDMG * 10**(CROPDMGEXP),
+        ECONOMICDAMAGE = PROPDAMAGE + CROPDAMAGE
+    )
+summary(stormData$ECONOMICDAMAGE)
+```
+
+We can see that 75% of the storms have an economic damage, less than thousands of dollars.
+
+In this report I'll consider the storms that have the most total economic damge the worst ones.
+So we sum the damages done by an event type and make a plt of the first ten to see which one does
+the most damage. And we report the total damage in million dollars.
+
+```{r EconomicDamageCalculation}
+worstEconomic <- stormData %>%
+    group_by(EVTYPE) %>%
+    summarise(
+        TOTALPROPDAMAGE = sum(PROPDAMAGE) / 1e6,
+        TOTALCROPDAMAGE = sum(CROPDAMAGE) / 1e6,
+    ) %>%
+    arrange(desc(TOTALPROPDAMAGE + TOTALCROPDAMAGE)) %>%
+    head(10) %>%
+    mutate(EVTYPE = factor(EVTYPE, levels = EVTYPE))
+```
+
+The above section groups the same events together and calculates thier total damage.
+and now for the plot we'll proceed this way.
+```{r EconomicDamagePlot}
+worstEconomic %>%
+    pivot_longer(
+        cols = c(TOTALPROPDAMAGE, TOTALCROPDAMAGE),
+        names_to = "type", values_to = "Damage"
+    ) %>%
+    ggplot(
+        aes(x = EVTYPE, y = Damage, fill = type)
+    ) +
+    geom_bar(
+        position = "stack", stat = "identity"
+    ) +
+    scale_fill_manual(
+        values = c("#ee4444cc", "#000000aa"),
+        labels = c("Crops", "Property"),
+    ) +
+    labs(
+        x = "Event Type", y = "Damage (millions $)",
+        title = "Top 10 events with the most economic damage"
+    ) +
+    scale_y_continuous(labels = scales::comma) +
+    theme(axis.text.x = element_text(angle = 30))
+```
+
+We can see that the event which causees the most damage to the economy is 
+`r worstEconomic$EVTYPE[1]` with total damage of 
+`r worstEconomic[1,]$TOTALPROPDAMAGE + worstEconomic[1,]$TOTALCROPDAMAGE` us$. 
+So it makes sense to invest more to control that.
+Also the plot makes it clear that the most economic damage is because of the damage done to the property with the only exception 
+`r worstEconomic %>% filter(TOTALCROPDAMAGE > TOTALPROPDAMAGE) %>% select(EVTYPE) %>% head(1)`.
+
+### Population Damage
+
+As for the damage to the population.
+
+```{r PopulationDamage}
+worstPopulatoinStorms <- stormData %>%
+    group_by(EVTYPE) %>%
+    summarise(
+        TOTALINJURIES = sum(INJURIES),
+        TOTALFATALITIES = sum(FATALITIES),
+        MEANINJURY = mean(INJURIES),
+        MEANFATALITY = mean(FATALITIES)
+    )
+
+worstFatalities <- worstPopulatoinStorms %>%
+    arrange(desc(TOTALFATALITIES)) %>%
+    select(EVTYPE) %>%
+    head(10)
+
+worstInjuries <- worstPopulatoinStorms %>%
+    arrange(desc(TOTALINJURIES)) %>%
+    select(EVTYPE) %>%
+    head(10)
+
+worst <- worstPopulatoinStorms %>%
+    filter(EVTYPE %in% worstFatalities$EVTYPE |
+        EVTYPE %in% worstInjuries$EVTYPE) %>%
+    arrange(desc(TOTALINJURIES + TOTALFATALITIES)) %>%
+    mutate(EVTYPE = factor(EVTYPE, levels = EVTYPE))
+```
+
+```{r}
+worst[1:5, ] %>%
+    pivot_longer(
+        cols = c(TOTALFATALITIES, TOTALINJURIES),
+        names_to = "type", values_to = "count"
+    ) %>%
+    ggplot(aes(x = EVTYPE, y = count, fill = type)) +
+    geom_bar(position = "stack", stat = "identity", ) +
+    scale_fill_manual(
+        values = c("#ee4444", "#000000cc"),
+        labels = c("Deaths", "Injuries")
+    ) +
+    theme(axis.text.x = element_text(angle = 45)) +
+    labs(
+        x = "Storm Type", y = "Counts",
+        title = "Total Number People Affected by the Event"
+    )
+```
+
+It is clear that the most of the injuries and fatalities happen by far with
+`r worst[1,]$EVTYPE`.

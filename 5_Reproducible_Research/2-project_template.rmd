@@ -1,0 +1,149 @@
+---
+title: "Reproducible Research: Peer Assessment 1"
+output: 
+  html_document:
+    keep_md: true
+---
+
+```{r include=FALSE}
+# some global options
+knitr::opts_chunk$set(warning = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_knit$set(cache = TRUE)
+knitr::opts_chunk$set(fig.path = "./figure/")
+```
+
+## Loading and preprocessing the data
+
+Here I'm using the "readr" package to read the data which handles most of the required steps to clean the data.
+
+```{r results="hide"}
+library(readr)
+library(tidyverse)
+if (!file.exists("activity.zip")) {
+  download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip", "activity.zip")
+}
+df <- read_csv("activity.zip")
+```
+
+Now let'a take a look at the data:
+
+```{r}
+dim(df)
+head(df)
+summary(df)
+```
+
+We can see there are two months of data, with some NA values in it. For now we'll leave them be.
+
+
+## What is mean total number of steps taken per day?
+
+Now we draw a plot of total number of steps taken each.
+
+```{r daily,warning=FALSE}
+dfDaily <- df %>%
+  group_by(date) %>%
+  summarise(total = sum(steps))
+
+meanSteps <- mean(dfDaily$total, na.rm = TRUE)
+medianSteps <- median(dfDaily$total, na.rm = TRUE)
+
+ggplot(dfDaily) +
+  geom_histogram(aes(x = total), bins = 40) +
+  geom_vline(xintercept = meanSteps, color = "red") +
+  geom_vline(xintercept = medianSteps, color = "blue")
+```
+
+We can see some missing lines in the graph.
+
+Calculated mean is: `r as.integer(meanSteps)` and the meidan is: `r as.integer(medianSteps)`.
+
+And we can see that the mean and median are very close.
+
+## What is the average daily activity pattern?
+
+```{r intervals}
+df %>%
+  group_by(interval) %>%
+  summarise(mean = mean(steps, na.rm = T)) %>%
+  ggplot(aes(x = interval, y = mean)) +
+  geom_line() +
+  geom_point(size = 0.5) +
+  scale_x_continuous(n.breaks = 23) +
+  theme(axis.text.x = element_text(angle = 60, vjust = 0.5)) +
+  stat_smooth(method = "lm", formula = y ~ 1, se = FALSE) +
+  labs(x = "Time", y = "Mean steps", title = "Average steps in each interval")
+```
+
+And for finding the time interval where the most activity is in average:
+
+```{r echo = TRUE}
+averages <- df %>%
+  group_by(interval) %>%
+  summarise(mean = mean(steps, na.rm = T))
+
+max <- averages[which.max(averages$mean), ]
+max
+```
+
+And the code gices us the answer is: `r max$interval`.
+
+## Imputing missing values
+
+There are a total of `r sum(is.na(df$steps))` missing values in the data whcih is 
+**`r as.integer(mean(is.na(df$steps))*100)`%** 
+of the data.
+
+For imputing the NA's I'll simply use the mean of that time interval.
+
+```{r}
+df2 <- df %>%
+  group_by(interval) %>%
+  mutate(steps = ifelse(is.na(steps), mean(steps, na.rm = T), steps))
+```
+
+Now we have df2 with no NA's.
+
+```{r histogram,warning=FALSE}
+dfDaily <- df2 %>%
+  group_by(date) %>%
+  summarise(total = sum(steps))
+
+meanSteps <- mean(dfDaily$total, na.rm = TRUE)
+medianSteps <- median(dfDaily$total, na.rm = TRUE)
+
+ggplot(dfDaily) +
+  geom_histogram(aes(x = total), bins = 40) +
+  geom_vline(xintercept = meanSteps, color = "red") +
+  geom_vline(xintercept = medianSteps, color = "blue")
+```
+
+Since we have replaced the NA's with the mean, we can see that the plot does not change so much. In fact, just some bars have a bit higher count and thats all.
+
+## Are there differences in activity patterns between weekdays and weekends?
+
+With this code we will add a column indicating weekday and weekends.
+```{r}
+df <- df %>%
+  mutate(weekday = ifelse(strftime(date, "%a") == "Sat" | strftime(date, "%a") == "Sun", "weekend", "weekday")) %>%
+  mutate(across(weekday, as.factor))
+
+summary(df$weekday)
+```
+
+Now let's plot average step taken in each time interval for the two categories:
+
+```{r weekend}
+df %>%
+  group_by(interval, weekday) %>%
+  summarise(mean = mean(steps, na.rm = T)) %>%
+  ggplot(aes(x = interval, y = mean)) +
+  geom_line() +
+  geom_point(size = 0.5) +
+  facet_grid(rows = vars(weekday)) +
+  scale_x_continuous(n.breaks = 23) +
+  theme(axis.text.x = element_text(angle = 60, vjust = 0.5)) +
+  stat_smooth(method = "lm", formula = y ~ 1, se = FALSE) +
+  labs(x = "Time", y = "Mean steps", title = "Average steps in each interval")
+```
