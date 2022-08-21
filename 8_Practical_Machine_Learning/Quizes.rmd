@@ -1,0 +1,501 @@
+---
+title: "Analyze of mtcars Data"
+output: 
+  html_document:
+    keep_md: true
+---
+```{r include=FALSE}
+# some global options
+knitr::opts_chunk$set(warning = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_knit$set(cache = TRUE)
+knitr::opts_chunk$set(fig.path = "./figure/")
+knitr::opts_chunk$set(fig.align = "center")
+```
+
+```{r library}
+library(Hmisc)
+library(caret)
+library(AppliedPredictiveModeling)
+library(dplyr)
+```
+
+```{r loadDate}
+data(concrete)
+set.seed(1000)
+inTrain <- createDataPartition(mixtures$CompressiveStrength, p = 3 / 4)[[1]]
+training <- mixtures[inTrain, ]
+testing <- mixtures[-inTrain, ]
+```
+
+
+```{r makeFactors}
+training$Cement <- cut2(training$Cement)
+training$BlastFurnaceSlag <- cut2(training$BlastFurnaceSlag)
+training$FlyAsh <- cut2(training$FlyAsh)
+training$Water <- cut2(training$Water)
+training$Superplasticizer <- cut2(training$Superplasticizer)
+training$CoarseAggregate <- cut2(training$CoarseAggregate)
+training$FineAggregate <- cut2(training$FineAggregate)
+training$Age <- cut2(training$Age)
+
+summary(training)
+```
+
+
+```{r plots }
+g <- ggplot(data = training)
+g <- g + aes(x = row.names(training), y = CompressiveStrength)
+g <- g + geom_point()
+g <- g + aes(color = FlyAsh)
+g
+```
+
+
+```{r}
+
+g <- ggplot(data = training)
+g <- g + aes(x = log(Superplasticizer + 1))
+g <- g + geom_density()
+
+
+g
+```
+
+```{r AlzheimerData} 
+set.seed(3433)
+data(AlzheimerDisease)
+adData <- data.frame(diagnosis, predictors)
+inTrain <- createDataPartition(adData$diagnosis, p = 3 / 4)[[1]]
+training <- adData[inTrain, ]
+testing <- adData[-inTrain, ]
+
+training <- as_tibble(training)
+training <- training %>%
+    select(c(
+        grep("IL", names(training)),
+        "diagnosis"
+    ))
+preObjpca <- preProcess(
+    x = training[, -13],
+    method = "pca", thresh = 0.9
+)
+
+preObjpca
+```
+
+```{r train_pca}
+training <- as_tibble(training)
+training <- training %>%
+    select(c(
+        grep("^IL", names(training)),
+        "diagnosis"
+    ))
+
+testing <- as_tibble(testing)
+testing <- testing %>%
+    select(c(
+        grep("^IL", names(testing)),
+        "diagnosis"
+    ))
+
+
+preObjpca <- preProcess(
+    x = training[, -13],
+    method = "pca", thresh = 0.8
+)
+
+trainPC <- predict(preObjpca, training)
+
+mdl1 <- train(
+    diagnosis ~ .,
+    method = "glm",
+    data = trainPC,
+)
+
+testingPre <- predict(preObjpca, testing)
+
+result <- predict(mdl1, testingPre)
+confusionMatrix(testing$diagnosis, result)
+```
+
+
+```{r train_def}
+training <- as_tibble(training)
+training <- training %>%
+    select(c(
+        grep("^IL", names(training)),
+        "diagnosis"
+    ))
+
+testing <- as_tibble(testing)
+testing <- testing %>%
+    select(c(
+        grep("^IL", names(testing)),
+        "diagnosis"
+    ))
+
+
+# preObjpca <- preProcess(
+# x = training[, -13],
+# method = "pca", thresh = 0.8
+# )
+
+trainPC <- training
+
+mdl2 <- train(
+    diagnosis ~ .,
+    method = "glm",
+    data = trainPC,
+)
+
+# testingPre <- predict(preObjpca, testing)
+testingPre <- testing
+
+result <- predict(mdl2, testingPre)
+confusionMatrix(testing$diagnosis, result)
+```
+
+```{r}
+library(caret)
+library(AppliedPredictiveModeling)
+set.seed(3433)
+data(AlzheimerDisease)
+adData <- data.frame(diagnosis, predictors)
+inTrain <- createDataPartition(adData$diagnosis, p = 3 / 4)[[1]]
+training <- adData[inTrain, ]
+testing <- adData[-inTrain, ]
+
+# grep all columns with IL and diagnosis in the traning and testing set
+trainingIL <- training[, grep("^IL|diagnosis", names(training))]
+testingIL <- testing[, grep("^IL|diagnosis", names(testing))]
+
+# non-PCA
+model <- train(diagnosis ~ ., data = trainingIL, method = "glm")
+predict_model <- predict(model, newdata = testingIL)
+matrix_model <- confusionMatrix(predict_model, testingIL$diagnosis)
+matrix_model$overall[1]
+```
+
+
+```{r}
+library(AppliedPredictiveModeling)
+data(segmentationOriginal)
+library(caret)
+library(rpart)
+set.seed(125)
+library(rattle)
+```
+
+```{r}
+trainSet <- segmentationOriginal[segmentationOriginal$Case == "Train", ]
+testSet <- segmentationOriginal[segmentationOriginal$Case == "Test", ]
+
+modelFit <- train(Class ~ ., data = trainSet, method = "rpart")
+```
+
+```{r}
+x <- as_tibble(testSet[1:4, ])
+# x <- select(
+# x,
+# )
+x <- new_tibble(x)
+x[1, ]$TotalIntenCh2 <- 23000
+x[1, ]$FiberWidthCh1 <- 10
+x[1, ]$PerimStatusCh1 <- 2
+
+x[2, ]$TotalIntenCh2 <- 50000
+x[2, ]$FiberWidthCh1 <- 10
+x[2, ]$VarIntenCh4 <- 100
+
+x[3, ]$TotalIntenCh2 <- 57000
+x[3, ]$FiberWidthCh1 <- 8
+x[3, ]$VarIntenCh4 <- 100
+
+x[4, ]$FiberWidthCh1 <- 8
+x[4, ]$VarIntenCh4 <- 100
+x[4, ]$PerimStatusCh1 <- 2
+```
+
+```{r}
+library(pgmm)
+data(olive)
+olive <- olive[, -1]
+```
+```{r}
+modelFit <- train(Area ~ ., data = olive, method = "rpart")
+```
+
+
+### Question 4
+Load the South Africa Heart Disease Data and create training and test sets with the following code:
+```{r}
+library(ElemStatLearn)
+data(SAheart)
+set.seed(8484)
+train <- sample(1:dim(SAheart)[1], size = dim(SAheart)[1] / 2, replace = F)
+trainSA <- SAheart[train, ]
+testSA <- SAheart[-train, ]
+set.seed(13234)
+```
+
+Then set the seed to 13234 and fit a logistic regression model  (method="glm", be sure to specify family="binomial") with Coronary Heart Disease (chd) as the outcome and age at onset, current alcohol consumption, obesity levels, cumulative tabacco, type-A behavior, and low density lipoprotein cholesterol as predictors. Calculate the misclassification rate for your model using this function and a prediction on the "response" scale:
+```{r}
+# trainSA$chd <- as.factor(trainSA$chd)
+# trainSA <- trainSA[, c("chd", "typea", "obesity", "alcohol", "age", "tobacco", "ldl")]
+model4 <- train(chd ~ typea + obesity + alcohol + age + tobacco + ldl,
+    data = trainSA, method = "glm", family = "binomial"
+)
+# model4 <- train(chd ~ ., data = trainSA, method = "glm", family = binomial())
+```
+
+```{r misclass}
+# trainSA$chd <- as.integer(trainSA$chd)
+missClass <- function(values, prediction) {
+    sum(((prediction > 0.5) * 1) != values) / length(values)
+}
+
+missClass(
+    trainSA$chd,
+    predict(model4, newdata = trainSA)
+)
+
+missClass(
+    testSA$chd,
+    predict(model4, newdata = testSA)
+)
+```
+
+```{r}
+set.seed(13234)
+modelSA <- train(chd ~ age + alcohol + obesity + tobacco + typea + ldl,
+    data = trainSA, method = "glm", family = "binomial"
+)
+print("test")
+missClass(testSA$chd, predict(modelSA, newdata = testSA))
+
+# print("train")
+# missClass(trainSA$chd, predict(modelSA, newdata = trainSA))
+```
+
+
+```{r}
+library(ElemStatLearn)
+library(randomForest)
+data(vowel.train)
+data(vowel.test)
+set.seed(33833)
+```
+
+```{r}
+vowel.train$y <- as.factor(vowel.train$y)
+vowel.test$y <- as.factor(vowel.test$y)
+
+model5 <- randomForest(y ~ ., data = vowel.train)
+```
+
+
+## Quiz 4
+### Question 1
+Set the variable y to be a factor variable in both the training and test set. Then set the seed to 33833. Fit (1) a random forest predictor relating the factor variable y to the remaining variables and (2) a boosted predictor using the "gbm" method. Fit these both with the train() command in the caret package. 
+
+What are the accuracies for the two approaches on the test data set? What is the accuracy among the test set 
+
+```{r}
+library(caret)
+library(ElemStatLearn)
+data(vowel.train)
+data(vowel.test)
+set.seed(33833)
+
+vowel.test$y <- as.factor(vowel.test$y)
+vowel.train$y <- as.factor(vowel.train$y)
+```
+
+```{r trains}
+model_rf <- train(y ~ ., data = vowel.train, method = "rf")
+model_gbm <- train(y ~ ., data = vowel.train, method = "gbm", verbose = FALSE)
+```
+
+```{r}
+pred_rf <- predict(model_rf, vowel.test)
+table(pred_rf, vowel.test$y)
+pred_gbm <- predict(model_gbm, vowel.test)
+table(pred_gbm, vowel.test$y)
+
+
+sum(pred_rf == vowel.test$y) / length(pred_rf)
+sum(pred_gbm == vowel.test$y) / length(pred_gbm)
+
+n1 <- sum(pred_rf == pred_gbm)
+n2 <- sum(pred_rf == pred_gbm) && (pred_rf == vowel.test$y)
+# / sum(pre)
+```
+
+
+### Question 2
+Load the Alzheimer's data using the following commands:
+```{r}
+library(caret)
+library(gbm)
+set.seed(3433)
+library(AppliedPredictiveModeling)
+data(AlzheimerDisease)
+adData <- data.frame(diagnosis, predictors)
+inTrain <- createDataPartition(adData$diagnosis, p = 3 / 4)[[1]]
+training <- adData[inTrain, ]
+testing <- adData[-inTrain, ]
+set.seed(62433)
+```
+
+Set the seed to 62433 and predict diagnosis with all the other variables using a random forest ("rf"), boosted trees ("gbm") and linear discriminant analysis ("lda") model. Stack the predictions together using random forests ("rf"). What is the resulting accuracy on the test set? Is it better or worse than each of the individual predictions? 
+
+- [ ] Stacked Accuracy: 0.80 is better than random forests and lda and the same as boosting. 
+
+- [ ] Stacked Accuracy: 0.76 is better than lda but not random forests or boosting. 
+
+- [ ] Stacked Accuracy: 0.69 is better than all three other methods
+
+- [ ] Stacked Accuracy: 0.80 is better than all three other methods
+```{r}
+model_rf <- train(diagnosis ~ ., data = training, method = "rf", verbose = FALSE)
+pred_rf <- predict(model_rf, testing)
+
+confusionMatrix(
+    training$diagnosis,
+    pred_rf
+)
+```
+
+```{r}
+model_gbm <- train(diagnosis ~ ., data = training, method = "gbm", verbose = FALSE)
+pred_gbm <- predict(model_gbm, testing)
+
+confusionMatrix(
+    testing$diagnosis,
+    pred_gbm
+)
+```
+
+```{r}
+model_lda <- train(diagnosis ~ ., data = training, method = "lda")
+pred_lda <- predict(model_lda, testing)
+
+confusionMatrix(
+    testing$diagnosis,
+    pred_lda
+)
+```
+
+
+```{r}
+stack_train <- data.frame(diagnosis = testing$diagnosis, rf = pred_rf, gbm = pred_gbm, lda = pred_lda)
+model_stack <- train(diagnosis ~ ., data = stack_train, method = "rf")
+pred_stack <- predict(model_stack, newdata = stack_train)
+
+confusionMatrix(
+    stack_train$diagnosis,
+    pred_stack
+)
+```
+
+
+### Question 3
+3. Load the concrete data with the commands:
+
+
+Set the seed to 233 and fit a lasso model to predict Compressive Strength. Which variable is the last coefficient to be set to zero as the penalty increases? (Hint: it may be useful to look up ?plot.enet). 
+
+- [x] Cement
+
+- [ ] CoarseAggregate
+
+- [ ] Age
+
+- [ ] Water
+
+```{r}
+set.seed(3523)
+library(AppliedPredictiveModeling)
+data(concrete)
+inTrain <- createDataPartition(concrete$CompressiveStrength, p = 3 / 4)[[1]]
+training <- concrete[inTrain, ]
+testing <- concrete[-inTrain, ]
+set.seed(233)
+```
+
+```{r}
+model_lasso <- train(CompressiveStrength ~ ., data = training, method = "lasso")
+library(elasticnet)
+
+plot.enet(model_lasso$finalModel, xvar = "penalty", use.color = TRUE)
+```
+
+
+### Question 4
+Load the data on the number of visitors to the instructors blog from here: 
+
+"https://d396qusza40orc.cloudfront.net/predmachlearn/gaData.csv"
+
+Using the commands:
+
+```{r}
+library(forecast) # For year() function below
+library(lubridate) # For year() function below
+dat <- read.csv("./gaData.csv")
+training <- dat[year(dat$date) < 2012, ]
+testing <- dat[(year(dat$date)) > 2011, ]
+tstrain <- ts(training$visitsTumblr)
+```
+
+Fit a model using the bats() function in the forecast package to the training time series. Then forecast this model for the remaining time points. For how many of the testing points is the true value within the 95% prediction interval bounds? 
+
+- [ ] 96%
+
+- [ ] 94%
+
+- [ ] 95%
+
+- [ ] 93%
+
+```{r}
+model_bats <- bats(tstrain)
+fcast <- forecast(model_bats, level = 95, h = dim(testing)[1])
+
+sum(fcast$lower < testing$visitsTumblr & testing$visitsTumblr < fcast$upper) /
+    dim(testing)[1]
+```
+
+
+### Question 5
+Load the concrete data with the commands:
+
+Set the seed to 325 and fit a support vector machine using the e1071 package to predict Compressive Strength using the default settings. Predict on the testing set. What is the RMSE?
+
+- [ ] 107.44
+
+- [ ] 6.93
+
+- [ ] 11543.39
+
+- [ ] 6.72
+
+```{r}
+set.seed(3523)
+library(AppliedPredictiveModeling)
+library(e1071)
+data(concrete)
+inTrain <- createDataPartition(concrete$CompressiveStrength, p = 3 / 4)[[1]]
+training <- concrete[inTrain, ]
+testing <- concrete[-inTrain, ]
+set.seed(325)
+```
+
+```{r}
+model_svm <- svm(CompressiveStrength ~ ., data = training)
+pred_svm <- predict(model_svm, testing)
+# sum(mo)
+
+sum((testing$CompressiveStrength - pred_svm)^2) / length(pred_svm)
+accuracy(pred_svm, testing$CompressiveStrength)
+```

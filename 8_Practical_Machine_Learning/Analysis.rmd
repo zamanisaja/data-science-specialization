@@ -1,0 +1,210 @@
+---
+title: "Prediction Assignment Writeup"
+author: "Saja"
+output: 
+  html_document:
+    keep_md: true
+---
+```{r include=FALSE}
+# some global options
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_knit$set(cache = TRUE)
+knitr::opts_chunk$set(fig.path = "./figure/")
+knitr::opts_chunk$set(fig.align = "center")
+```
+
+### Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These types of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+### Loading the data
+First let's load the data and setup our workspace.
+```{r echo=FALSE}
+if (!dir.exists("./data")) {
+  dir.create("./data/")
+  download.file(url = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile = "./data/pml-training.csv")
+  download.file(url = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", destfile = "./data/pml-testing.csv")
+}
+```
+
+```{r libraries, warning = F}
+library(tidyverse)
+library(caret)
+library(lattice)
+library(kernlab)
+library(rattle)
+library(corrplot)
+set.seed(12321)
+```
+
+```{r loadData,warning=F}
+train_data <- read_csv("./data/pml-training.csv")
+test_data <- read_csv("./data/pml-testing.csv")
+```
+
+```{r }
+dim(train_data)
+# names(train_data)
+sum(is.na(train_data)) / (dim(train_data)[1] * dim(train_data)[2])
+```
+
+More than 60% of our data consists of missing values. We'll drop the columns which more than 95% of missing values in them.
+
+```{r tidyData}
+dropCols <- colSums(is.na(train_data)) > 0.95 * dim(train_data)[1]
+train_data <- train_data[, -c(1:dim(train_data)[2]) * dropCols]
+```
+
+## Train and Cross-Validation Data
+Now let's seperat the output from input. And also split our data into two chunks, one for training and one for cross validation.
+```{r splitData}
+# lets save the output y in a seperate dataframe
+out_vector <- c("...1", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp", "new_window", "num_window", "classe")
+y <- train_data %>%
+  select(out_vector)
+
+y$classe <- as.factor(train_data$classe)
+
+train_data <- train_data %>%
+  select(-out_vector)
+
+index <- createDataPartition(y$classe, p = 0.7, list = F)
+cv_data <- train_data[-index, ]
+cv_y <- y[-index, ]
+train_data <- train_data[index, ]
+y <- y[index, ]
+```
+
+## Training
+
+Now I'm going to test different kinds of modelling for the data.
+
+### LDA
+```{r}
+fitModel_lda <- train(
+  x = train_data,
+  y = y$classe,
+  preProcess = c("center", "scale"),
+  method = "lda"
+)
+
+lda_predict <- predict(fitModel_lda, cv_data)
+
+cfmtrx_lda <- confusionMatrix(cv_y$classe, lda_predict)
+cfmtrx_lda$overall
+```
+
+### SVM
+```{r}
+fitModel_svm <- train(
+  x = train_data,
+  y = y$classe,
+  method = "svmLinear",
+  preProcess = c("center", "scale"),
+  trControl = trainControl(method = "cv", number = 3, verboseIter = F),
+  tuneLength = 5,
+  verbose = F
+)
+
+svm_predict <- predict(fitModel_svm, cv_data)
+
+cfmtrx_svm <- confusionMatrix(cv_y$classe, svm_predict)
+cfmtrx_svm$overall
+```
+
+### Random Forrest
+```{r}
+fitModel_rf <- train(
+  x = train_data,
+  y = y$classe,
+  method = "rf",
+  preProcess = c("center", "scale"),
+  trControl = trainControl(method = "cv", number = 3, verboseIter = F),
+  tuneLength = 5,
+  verbose = F
+)
+
+rf_predict <- predict(fitModel_rf, cv_data)
+
+cfmtrx_rf <- confusionMatrix(cv_y$classe, rf_predict)
+cfmtrx_rf$overall
+```
+
+### GBM
+```{r}
+fitModel_gbm <- train(
+  x = train_data,
+  y = y$classe,
+  method = "gbm",
+  preProcess = c("center", "scale"),
+  trControl = trainControl(method = "cv", number = 3, verboseIter = F),
+  tuneLength = 1,
+  verbose = F
+)
+
+gbm_predict <- predict(fitModel_gbm, cv_data)
+
+cfmtrx_gbm <- confusionMatrix(cv_y$classe, gbm_predict)
+cfmtrx_gbm$overall
+```
+
+Thne we can create a mix predictor based on previous predictions.
+
+### Mixed
+```{r}
+mixed_pred_data <- data.frame(
+  lda = predict(fitModel_lda),
+  svm = predict(fitModel_svm),
+  rf = predict(fitModel_rf),
+  gbm = predict(fitModel_gbm),
+  classe = y$classe
+)
+
+fitModel_mix <- train(
+  classe ~ .,
+  data = mixed_pred_data,
+  method = "rpart",
+  tuneLength = 7,
+)
+
+mixed_cv_data <- data.frame(
+  lda = lda_predict,
+  svm = svm_predict,
+  rf = rf_predict,
+  gbm = gbm_predict,
+  classe = cv_y$classe
+)
+
+mixed_predict <- predict(fitModel_mix, mixed_cv_data)
+cfmtrx_mix <- confusionMatrix(mixed_cv_data$classe, mixed_predict)
+cfmtrx_mix$overall
+
+fancyRpartPlot(fitModel_mix$finalModel)
+```
+
+By this diagram we can conclude that the fix model is exactly behaving like Random Forrest prediction.
+So I'll pick that model to predict my test set.
+
+
+### Predict Test set
+
+We can now use the predictor on the test data.
+
+```{r predictTest}
+test_pred <- predict(fitModel_rf, test_data)
+
+print(test_pred)
+```
