@@ -1,3 +1,6 @@
 [submodule "Courses"]
 	path = Courses
 	url = https://github.com/DataScienceSpecialization/courses
+[submodule "9_Developing_Data_Products/Population-Pyramid"]
+	path = 9_Developing_Data_Products/Population-Pyramid
+	url = https://github.com/zamanisaja/Population-Pyramid
