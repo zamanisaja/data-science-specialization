@@ -1,0 +1,46 @@
+---
+title: "Capstone Project"
+author: "Sadjad Zamani"
+always_allow_html: true
+output: 
+  html_document:
+    keep_md: true
+---
+```{r include=FALSE}
+# some global options
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_knit$set(cache = TRUE)
+knitr::opts_chunk$set(fig.path = "./figure/")
+knitr::opts_chunk$set(fig.align = "center")
+```
+
+
+## Introduction
+
+
+```{r}
+library(R.utils)
+library(tidyverse)
+```
+```{r}
+my_file <- "../input/capstone/data/en_US/en_US.twitter_100.txt"
+con <- file(my_file, "r")
+number_of_lines <- countLines(my_file)[1]
+lines <- readLines(con) ## Read all the lines
+close(con)
+```
+
+
+```{r}
+set.seed(123)
+start_at <- floor(runif(90, min = 1, max = number_of_lines))
+
+# sort the index sequentially
+start_at <- start_at[order(start_at)]
+
+start_at <- c(start_at, number_of_lines) - c(0, start_at)
+
+sapply()
+start_at
+```
