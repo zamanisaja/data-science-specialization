@@ -1,0 +1,73 @@
+---
+title: "Analyze of mtcars Data"
+output: 
+  html_document:
+    keep_md: true
+---
+```{r include=FALSE}
+# some global options
+knitr::opts_chunk$set(warning = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_knit$set(cache = TRUE)
+knitr::opts_chunk$set(fig.path = "./figure/")
+knitr::opts_chunk$set(fig.align = "center")
+```
+
+### Introduction
+In this analysis, we're going to investigate the differences between an automatic and manual transmission and in particular what is their effect on the gallon usage of cars. For this analysis, we want to use the "mtcars" database built in r.
+
+
+```{r loadData}
+library(ggplot2)
+data(mtcars)
+head(mtcars, 4)
+```
+
+Manual of "mtcars" says we that "mpg" is Miles/(US) gallon and "am" stands for: Transmission (0 = automatic, 1 = manual).
+
+```{r boxplots}
+mtcars$am <- as.factor(mtcars$am)
+levels(mtcars$am) <- c("Automatic", "Manual")
+g <- ggplot(data = mtcars)
+g <- g + aes(x = am, y = mpg, fill = am)
+g <- g + geom_boxplot()
+g <- g + xlab("Transmission Type") + ylab("Miles per Gallon")
+
+g
+```
+
+Looking at the plot, there might be a difference in fuel usage between different transmission types.
+
+```{r model1}
+mdl1 <- lm(mpg ~ am, data = mtcars)
+summary(mdl1)$coef
+```
+
+From the coefficients, we can conclude that when we switch from automatic to manual the miles per gallon increase by an average of 7.24 miles. But let's investigate a bit more.
+
+```{r model2}
+mdl2 <- lm(mpg ~ am + cyl, data = mtcars)
+summary(mdl2)$coef
+```
+
+This new linear model suggests that if we hold the number of cylinders constant the increase in miles is just 2.56 which is far smaller than the previous model.
+And the t-test also shows less significance.
+
+```{r model3}
+mdl3 <- lm(mpg ~ am + cyl + wt, data = mtcars)
+summary(mdl3)$coef
+```
+
+With adding the new covariate wt(weight) the coefficient becomes as small as 0.17.
+
+By these analyses, I'd say that transmission type does not a have high effect on the fuel usage of a car.
+
+### Residuals
+```{r residuals}
+par(mfrow = c(2, 2))
+plot(mdl3)
+```
+Residuals spread around the fitted value seem normal.
+
+### Conclusion
+The transmission type does not have a high influence on fuel usage.
