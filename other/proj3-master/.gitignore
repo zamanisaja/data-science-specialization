@@ -1,0 +1,8 @@
+**/.DS_Store
+.Rproj.user
+proj3.Rproj
+.vscode
+.RData
+.Rhistory
+Dataset.zip
+tidydata.txt

@@ -1,0 +1,39 @@
+---
+title: "A demo of plotly"
+author: "Saja"
+output: 
+  html_document:
+    keep_md: true
+---
+```{r include=FALSE}
+# some global options
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_knit$set(cache = TRUE)
+knitr::opts_chunk$set(fig.path = "./figure/")
+knitr::opts_chunk$set(fig.align = "center")
+```
+
+
+## Introduction
+This is just a simple demo of how to use plotly in R.
+
+```{r}
+library(plotly)
+set.seed(12321)
+
+nbins <- 50
+n <- nbins * nbins * 100
+
+x <- rnorm(n, mean = 1, sd = 0.5)
+y <- rnorm(n, mean = 1, sd = 0.5)
+
+fig <- plot_ly(x = x, y = y) %>%
+    add_histogram2d() %>%
+    layout(
+        xaxis = list(range = list(-1, 2.5)),
+        yaxis = list(range = list(-1, 2.5))
+    )
+
+fig
+```
